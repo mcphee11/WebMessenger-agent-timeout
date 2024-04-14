@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<!-- Created as an example by https://github.com/mcphee11 -->
+<html>
+  <head>
+    <meta name="robots" content="noindex" />
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Timeout</title>
+    <meta name="Template" content="" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Genesys SDK info https://developer.genesys.cloud/ -->
+    <script src="https://sdk-cdn.mypurecloud.com/javascript/latest/purecloud-platform-client-v2.min.js"></script>
+  </head>
+  <body onload="start()" style="background-color: white">
+    <script>
+      'use strict' //Enables strict mode is JavaScript
+      let url = new URL(document.location.href)
+      let gc_region = url.searchParams.get('gc_region')
+      let gc_clientId = url.searchParams.get('gc_clientId')
+      let gc_redirectUrl = url.searchParams.get('gc_redirectUrl')
+      let gc_response = url.searchParams.get('gc_response')
+      let gc_responseTime = url.searchParams.get('gc_responseTime')
+      let gc_closeTime = url.searchParams.get('gc_closeTime')
+
+      //http://localhost:8080/index.html?gc_response=are%20you%20still%20there&gc_responseTime=30&gc_closeTime=120&gc_region=mypurecloud.com.au&gc_clientId=de22258a-182d-4449-8d79-4a8c609e435a&gc_conversationId={{Scripter.Interaction ID}}&gc_redirectUrl=http://localhost:8080/index.html
+
+      //Getting and setting the GC details from dynamic URL and session storage
+      gc_region ? sessionStorage.setItem('gc_region', gc_region) : (gc_region = sessionStorage.getItem('gc_region'))
+      gc_clientId ? sessionStorage.setItem('gc_clientId', gc_clientId) : (gc_clientId = sessionStorage.getItem('gc_clientId'))
+      gc_redirectUrl ? sessionStorage.setItem('gc_redirectUrl', gc_redirectUrl) : (gc_redirectUrl = sessionStorage.getItem('gc_redirectUrl'))
+      gc_response ? sessionStorage.setItem('gc_response', gc_response) : (gc_response = sessionStorage.getItem('gc_response'))
+      gc_responseTime ? sessionStorage.setItem('gc_responseTime', gc_responseTime) : (gc_responseTime = sessionStorage.getItem('gc_responseTime'))
+      gc_closeTime ? sessionStorage.setItem('gc_closeTime', gc_closeTime) : (gc_closeTime = sessionStorage.getItem('gc_closeTime'))
+
+      let platformClient = require('platformClient')
+      const client = platformClient.ApiClient.instance
+      const uapi = new platformClient.UsersApi()
+      const capi = new platformClient.ConversationsApi()
+
+      async function start() {
+        try {
+          client.setEnvironment(gc_region)
+          client.setPersistSettings(true, '_mm_')
+
+          console.log('%cLogging in to Genesys Cloud', 'color: green')
+          await client.loginImplicitGrant(gc_clientId, gc_redirectUrl, {})
+
+          //Enter in starting code.
+          setInterval(function () {
+            console.log('timeout +29sec')
+            current()
+          }, 29000)
+        } catch (err) {
+          console.log('Error: ', err)
+        }
+      } //End of start() function
+
+      async function current() {
+        let current = await capi.getConversationsMessages()
+        console.log(current)
+
+        if (current.total >= 1) {
+          for (const con of current.entities) {
+            let now = new Date(Date.now())
+
+            //agent side of conversation
+            // prettier-ignore
+            let agentParticipant = con.participants.slice().reverse().find(p => p.purpose === 'agent' && p.state === 'connected')
+            let agentLastMsg = 0
+            if (!agentParticipant) {
+              return
+            }
+            console.log(agentParticipant.messages.length)
+            if (agentParticipant.messages.length >= 1) {
+              agentLastMsg = agentParticipant.messages[agentParticipant.messages.length - 1].messageTime
+            }
+            let agentDiffMs = 0
+            if (agentLastMsg !== 0) {
+              agentDiffMs = (now - new Date(agentLastMsg)) / 1000
+            }
+            console.log(`conversationId: ${con.id} agentTime ${agentDiffMs}`)
+
+            //customer side of conversation
+            // prettier-ignore
+            let customerParticipant = con.participants.slice().reverse().find(p => p.purpose === 'customer' && p.state === 'connected')
+            let customerLastMsg = 0
+            if (customerParticipant.messages.length >= 1) {
+              customerLastMsg = customerParticipant.messages[customerParticipant.messages.length - 1].messageTime
+            }
+            let customerDiffMs = 0
+            if (customerLastMsg !== 0) {
+              customerDiffMs = (now - new Date(customerLastMsg)) / 1000
+            }
+            console.log(`conversationId: ${con.id} customerTime ${customerDiffMs}`)
+
+            if (customerDiffMs > gc_closeTime && sessionStorage.getItem(con.id) == 'true' && agentDiffMs > gc_closeTime && sessionStorage.getItem(con.id) == 'true') {
+              sessionStorage.removeItem(con.id)
+              console.log('closed')
+              await capi.patchConversationsMessageParticipant(con.id, agentParticipant.id, { body: { state: 'DISCONNECTED' } })
+              return
+            }
+            if (customerDiffMs > gc_responseTime && !sessionStorage.getItem(con.id) && agentDiffMs > gc_responseTime && !sessionStorage.getItem(con.id)) {
+              sessionStorage.setItem(con.id, true)
+              console.log('first')
+              console.log(gc_response)
+              await capi.postConversationsMessageCommunicationMessages(con.id, customerParticipant.peer, { textBody: gc_response })
+              return
+            }
+          }
+        }
+      }
+    </script>
+  </body>
+</html>
