@@ -22,8 +22,6 @@
       let gc_responseTime = url.searchParams.get('gc_responseTime')
       let gc_closeTime = url.searchParams.get('gc_closeTime')
 
-      //http://localhost:8080/index.html?gc_response=are%20you%20still%20there&gc_responseTime=30&gc_closeTime=120&gc_region=mypurecloud.com.au&gc_clientId=de22258a-182d-4449-8d79-4a8c609e435a&gc_conversationId={{Scripter.Interaction ID}}&gc_redirectUrl=http://localhost:8080/index.html
-
       //Getting and setting the GC details from dynamic URL and session storage
       gc_region ? sessionStorage.setItem('gc_region', gc_region) : (gc_region = sessionStorage.getItem('gc_region'))
       gc_clientId ? sessionStorage.setItem('gc_clientId', gc_clientId) : (gc_clientId = sessionStorage.getItem('gc_clientId'))
